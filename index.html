@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Gratis</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .chat-container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #chat-box {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        .message.user {
+            background-color: #e3f2fd;
+        }
+        .message.system {
+            background-color: #ffecb3;
+            text-align: center;
+        }
+        .timestamp {
+            font-size: 0.7rem;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <h1 class="text-center">Chat Room</h1>
+        <div id="login-section">
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" class="form-control" id="username" placeholder="Masukkan username">
+            </div>
+            <div class="mb-3">
+                <label for="room" class="form-label">Room</label>
+                <input type="text" class="form-control" id="room" placeholder="Masukkan nama room">
+            </div>
+            <button class="btn btn-primary w-100" onclick="joinRoom()">Gabung</button>
+        </div>
+        
+        <div id="chat-section" style="display: none;">
+            <div id="chat-box"></div>
+            <div class="input-group mb-3">
+                <input type="text" class="form-control" id="message" placeholder="Ketik pesan...">
+                <button class="btn btn-success" onclick="sendMessage()">Kirim</button>
+            </div>
+            <button class="btn btn-danger w-100" onclick="leaveRoom()">Keluar</button>
+        </div>
+    </div>
+
+    <!-- Gunakan Socket.IO client dari CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script>
+        // Ganti dengan URL backend yang akan di-deploy di Render.com
+        // Untuk lokal: 'http://localhost:5000'
+        const backendUrl = 'https://your-backend-app.onrender.com';
+        const socket = io.connect(backendUrl);
+        
+        let currentRoom = '';
+        let currentUsername = '';
+        
+        // Fungsi untuk gabung room
+        function joinRoom() {
+            const username = document.getElementById('username').value.trim();
+            const room = document.getElementById('room').value.trim();
+            
+            if (!username || !room) {
+                alert('Username dan room harus diisi!');
+                return;
+            }
+            
+            currentUsername = username;
+            currentRoom = room;
+            
+            // Sembunyikan form login, tampilkan chat
+            document.getElementById('login-section').style.display = 'none';
+            document.getElementById('chat-section').style.display = 'block';
+            
+            // Gabung ke room via socket
+            socket.emit('join', { username, room });
+            
+            // Ambil history chat
+            fetch(`${backendUrl}/history?room=${room}`)
+                .then(response => response.json())
+                .then(messages => {
+                    const chatBox = document.getElementById('chat-box');
+                    messages.forEach(msg => {
+                        displayMessage(msg.username, msg.message, msg.timestamp);
+                    });
+                });
+        }
+        
+        // Fungsi kirim pesan
+        function sendMessage() {
+            const messageInput = document.getElementById('message');
+            const message = messageInput.value.trim();
+            
+            if (message) {
+                socket.emit('send_message', {
+                    room: currentRoom,
+                    username: currentUsername,
+                    message: message
+                });
+                messageInput.value = '';
+            }
+        }
+        
+        // Fungsi keluar room
+        function leaveRoom() {
+            socket.emit('leave', { room: currentRoom, username: currentUsername });
+            document.getElementById('chat-section').style.display = 'none';
+            document.getElementById('login-section').style.display = 'block';
+            document.getElementById('chat-box').innerHTML = '';
+            currentRoom = '';
+            currentUsername = '';
+        }
+        
+        // Fungsi untuk menampilkan pesan di chat box
+        function displayMessage(username, message, timestamp) {
+            const chatBox = document.getElementById('chat-box');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${username === 'System' ? 'system' : 'user'}`;
+            
+            // Format waktu
+            const timeString = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            
+            messageDiv.innerHTML = `
+                <strong>${username}:</strong> ${message}
+                <div class="timestamp">${timeString}</div>
+            `;
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+        
+        // Terima pesan dari server
+        socket.on('message', (data) => {
+            displayMessage(data.username, data.message);
+        });
+    </script>
+</body>
+</html>
